@@ -22,7 +22,6 @@ jobs:
       fail-fast: false
       matrix:
         # 定义需要构建的组合
-        # 您可以按需添加或删除这里的条目
         include:
           # 为 Debian/Ubuntu 构建 .deb 包
           - arch: x86_64
@@ -32,10 +31,10 @@ jobs:
             distro: debian
             runs_on: ubuntu-24.04-arm
           
-          # 为 Fedora/CentOS/RHEL 构建 .rpm 包
+          # 【已修改】为 Fedora/CentOS/RHEL 在其原生系统上构建 .rpm 包
           - arch: x86_64
             distro: rpm
-            runs_on: ubuntu-latest
+            runs_on: fedora-latest
 
     runs-on: ${{ matrix.runs_on }}
     env:
@@ -58,18 +57,18 @@ jobs:
 
       - name: 安装依赖项
         run: |
-          sudo apt-get update
-          # 安装通用依赖
-          sudo apt-get install -y \
-            git build-essential libncurses-dev libssl-dev libelf-dev \
-            bison bc flex rsync fakeroot kmod cpio dwarves \
-            lz4 zstd xz-utils curl jq
-          
-          # 根据发行版类型安装特定的打包工具
+          # 【已修改】根据不同的发行版使用对应的包管理器安装依赖
           if [ "${{ env.DISTRO }}" = "debian" ]; then
-            sudo apt-get install -y dpkg-dev
+            sudo apt-get update
+            sudo apt-get install -y \
+              git build-essential libncurses-dev libssl-dev libelf-dev \
+              bison bc flex rsync fakeroot kmod cpio dwarves \
+              lz4 zstd xz-utils curl jq dpkg-dev
           elif [ "${{ env.DISTRO }}" = "rpm" ]; then
-            sudo apt-get install -y rpm-build
+            sudo dnf install -y \
+              git make gcc ncurses-devel openssl-devel elfutils-libelf-devel \
+              bison bc flex rsync fakeroot kmod cpio dwarves \
+              lz4-devel zstd-devel xz-devel curl jq rpm-build
           fi
 
       - name: 创建源码目录
