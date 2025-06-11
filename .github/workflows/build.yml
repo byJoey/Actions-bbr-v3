@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 删除旧的工作流运行记录
-        uses: Mattraks/delete-workflow-runs@main
+        uses: Mattraks/delete-workflow-runs@v0.0.3
         with:
           retain_days: 0
           keep_minimum_runs: 1
@@ -29,7 +29,7 @@ jobs:
             runs_on: ubuntu-latest
           - arch: arm64
             distro: debian
-            runs_on: ubuntu-24.04-arm
+            runs_on: ubuntu-latest # 更改为 ubuntu-latest，如果需要特定的 ARM64 运行器，请考虑自托管或等待官方支持
           
           # 为 Fedora/CentOS/RHEL 构建 .rpm 包
           - arch: x86_64
@@ -64,7 +64,7 @@ jobs:
         id: get_kernel_info
         run: |
           # 从 kernel.org 获取最新的稳定版版本号
-          STABLE_VERSION=$(curl -s https://www.kernel.org | grep -A1 '<strong>stable:</strong>' | grep -oP '(?<=<a href="[^"]+">)[^<]+' | head -n1)
+          STABLE_VERSION=$(curl -s https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
           # 提取主版本号，如 6.9
           MAJOR_VERSION=$(echo "$STABLE_VERSION" | awk -F. '{print $1"."$2}')
           
@@ -84,6 +84,9 @@ jobs:
           # 下载 Google BBRv3 源码用于生成补丁
           echo "正在下载 Google BBRv3 源码..."
           git clone --depth=50 https://github.com/google/bbr.git ./bbr_source
+          cd ./bbr_source
+          git checkout v3
+          cd ..
 
       - name: 生成并应用 BBRv3 补丁
         working-directory: ./kernel_source
@@ -148,7 +151,7 @@ jobs:
           path: ./packages/
 
       - name: 发布到 GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v0.11.6
         with:
           tag_name: v${{ env.LATEST_KERNEL_VERSION }}${{ env.LOCALVERSION }}-${{ matrix.distro }}-${{ matrix.arch }}
           body: |
