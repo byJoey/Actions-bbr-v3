@@ -34,9 +34,10 @@ SYSCTL_CONF="/etc/sysctl.d/99-joeyblog.conf"
 
 # 函数：清理 sysctl.d 中的旧配置
 clean_sysctl_conf() {
-    sudo touch "$SYSCTL_CONF"
-    sudo sed -i '/net.core.default_qdisc/d' "$SYSCTL_CONF"
-    sudo sed -i '/net.ipv4.tcp_congestion_control/d' "$SYSCTL_CONF"
+    for filepath in /etc/sysctl.d/*.conf ; do
+        sudo sed -i '/net.core.default_qdisc/d' "$filepath"
+        sudo sed -i '/net.ipv4.tcp_congestion_control/d' "$filepath"
+    done
 }
 
 # 函数：询问是否永久保存更改
@@ -45,6 +46,7 @@ ask_to_save() {
     read -r SAVE
     if [[ "$SAVE" == "y" || "$SAVE" == "Y" ]]; then
         clean_sysctl_conf
+        sudo touch "$SYSCTL_CONF"
         echo "net.core.default_qdisc=$QDISC" | sudo tee -a "$SYSCTL_CONF" > /dev/null
         echo "net.ipv4.tcp_congestion_control=$ALGO" | sudo tee -a "$SYSCTL_CONF" > /dev/null
         sudo sysctl --system > /dev/null 2>&1
