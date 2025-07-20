@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 编译好的内核
-BASE_URL="https://api.github.com/repos/XDflight/Actions-bbr-v3/releases"
+BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
 
 # 限制脚本仅支持基于 Debian/Ubuntu 的系统
 if ! command -v apt-get &> /dev/null; then
