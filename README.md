@@ -28,7 +28,7 @@
 
 ### 🌟 功能列表  
 
-👑 **一键安装 BBR v3 内核**  
+👑 **一键安装 BBR v3 内核（可选最新版/LTS版内核）**  
 🍰 **切换加速模式（BBR+FQ、BBR+CAKE 等）**  
 ⚙️ **开启/关闭 BBR 加速**  
 🗑️ **卸载内核，告别不需要的内核版本**  
@@ -39,9 +39,14 @@
 
 ### 🚀 如何使用？
 
-1. **一键运行**  
+- **一键运行**  
    ```bash
    bash <(curl -l -s https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/refs/heads/main/install.sh)
+   ```
+
+- **国内下载慢的话用这个！**（使用CDN代理） 
+   ```bash
+   CDN=1 bash <(curl -L -l -s https://raw.staticdn.net/byJoey/Actions-bbr-v3/refs/heads/main/install.sh)
    ```
 
 ---

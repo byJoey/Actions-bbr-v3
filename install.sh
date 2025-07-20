@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# 编译好的内核
+BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
+
 # 限制脚本仅支持基于 Debian/Ubuntu 的系统
 if ! command -v apt-get &> /dev/null; then
     echo -e "\033[31m此脚本仅支持基于 Debian/Ubuntu 的系统，请在支持 apt-get 的系统上运行！\033[0m"
@@ -31,9 +34,10 @@ SYSCTL_CONF="/etc/sysctl.d/99-joeyblog.conf"
 
 # 函数：清理 sysctl.d 中的旧配置
 clean_sysctl_conf() {
-    sudo touch "$SYSCTL_CONF"
-    sudo sed -i '/net.core.default_qdisc/d' "$SYSCTL_CONF"
-    sudo sed -i '/net.ipv4.tcp_congestion_control/d' "$SYSCTL_CONF"
+    for filepath in /etc/sysctl.d/*.conf ; do
+        sudo sed -i '/net.core.default_qdisc/d' "$filepath"
+        sudo sed -i '/net.ipv4.tcp_congestion_control/d' "$filepath"
+    done
 }
 
 # 函数：询问是否永久保存更改
@@ -42,6 +46,7 @@ ask_to_save() {
     read -r SAVE
     if [[ "$SAVE" == "y" || "$SAVE" == "Y" ]]; then
         clean_sysctl_conf
+        sudo touch "$SYSCTL_CONF"
         echo "net.core.default_qdisc=$QDISC" | sudo tee -a "$SYSCTL_CONF" > /dev/null
         echo "net.ipv4.tcp_congestion_control=$ALGO" | sudo tee -a "$SYSCTL_CONF" > /dev/null
         sudo sysctl --system > /dev/null 2>&1
@@ -108,7 +113,6 @@ install_packages() {
 # 函数：检查并安装最新版本
 install_latest_version() {
     echo -e "\033[36m正在从 GitHub 获取最新版本信息...\033[0m"
-    BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
     RELEASE_DATA=$(curl -sL "$BASE_URL")
     if [[ -z "$RELEASE_DATA" ]]; then
         echo -e "\033[31m从 GitHub 获取版本信息失败。请检查网络连接或 API 状态。\033[0m"
@@ -119,7 +123,15 @@ install_latest_version() {
     [[ "$ARCH" == "aarch64" ]] && ARCH_FILTER="arm64"
     [[ "$ARCH" == "x86_64" ]] && ARCH_FILTER="x86_64"
 
-    LATEST_TAG_NAME=$(echo "$RELEASE_DATA" | jq -r --arg filter "$ARCH_FILTER" 'map(select(.tag_name | test($filter; "i"))) | sort_by(.published_at) | .[-1].tag_name')
+    LATEST_TAG_NAME=""
+    if [[ $1 -eq 1 ]]; then
+        # 如果是 LTS 版本，过滤出 LTS 标签
+        LATEST_TAG_NAME=$(echo "$RELEASE_DATA" | jq -r --arg filter "$ARCH_FILTER" 'map(select(.tag_name | test(($filter + ".*LTS"); "i"))) | sort_by(.published_at) | .[-1].tag_name')
+    else
+        # 否则获取最新版本
+        LATEST_TAG_NAME=$(echo "$RELEASE_DATA" | jq -r --arg filter "$ARCH_FILTER" 'map(select(.tag_name | test($filter; "i"))) | sort_by(.published_at) | .[-1].tag_name')
+    fi
+    LATEST_TAG_NAME=$(echo "$LATEST_TAG_NAME" | sed 's/-LTS//')
 
     if [[ -z "$LATEST_TAG_NAME" || "$LATEST_TAG_NAME" == "null" ]]; then
         echo -e "\033[31m未找到适合当前架构 ($ARCH) 的最新版本。\033[0m"
@@ -140,12 +152,15 @@ install_latest_version() {
     fi
 
     echo -e "\033[33m发现新版本或未安装内核，准备下载...\033[0m"
-    ASSET_URLS=$(echo "$RELEASE_DATA" | jq -r --arg tag "$LATEST_TAG_NAME" '.[] | select(.tag_name == $tag) | .assets[].browser_download_url')
-    
+    ASSET_URLS=$(echo "$RELEASE_DATA" | jq -r --arg tag "$LATEST_TAG_NAME" '.[] | select(.tag_name | test($tag; "i")) | .assets[].browser_download_url')
+
     rm -f /tmp/linux-*.deb
 
     for URL in $ASSET_URLS; do
         echo -e "\033[36m正在下载文件：$URL\033[0m"
+        if [[ CDN -eq 1 ]]; then
+            URL="https://hub.gitmirror.com/$URL"
+        fi
         wget -q --show-progress "$URL" -P /tmp/ || { echo -e "\033[31m下载失败：$URL\033[0m"; return 1; }
     done
     
@@ -154,7 +169,6 @@ install_latest_version() {
 
 # 函数：安装指定版本
 install_specific_version() {
-    BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
     RELEASE_DATA=$(curl -s "$BASE_URL")
     if [[ -z "$RELEASE_DATA" ]]; then
         echo -e "\033[31m从 GitHub 获取版本信息失败。请检查网络连接或 API 状态。\033[0m"
@@ -197,6 +211,9 @@ install_specific_version() {
     
     for URL in $ASSET_URLS; do
         echo -e "\033[36m下载中：$URL\033[0m"
+        if [[ CDN -eq 1 ]]; then
+            URL="https://hub.gitmirror.com/$URL"
+        fi
         wget -q --show-progress "$URL" -P /tmp/ || { echo -e "\033[31m下载失败：$URL\033[0m"; return 1; }
     done
 
@@ -221,7 +238,7 @@ echo -e "\033[1;33m作者：Joey  |  博客：https://joeyblog.net  |  反馈群
 print_separator
 
 echo -e "\033[1;33m╭( ･ㅂ･)و ✧ 你可以选择以下操作哦：\033[0m"
-echo -e "\033[33m 1. 🚀 安装或更新 BBR v3 (最新版)\033[0m"
+echo -e "\033[33m 1. 🚀 安装或更新 BBR v3 (最新版/最新LTS版)\033[0m"
 echo -e "\033[33m 2. 📚 指定版本安装\033[0m"
 echo -e "\033[33m 3. 🔍 检查 BBR v3 状态\033[0m"
 echo -e "\033[33m 4. ⚡ 启用 BBR + FQ\033[0m"
@@ -235,7 +252,19 @@ read -r ACTION
 case "$ACTION" in
     1)
         echo -e "\033[1;32m٩(｡•́‿•̀｡)۶ 您选择了安装或更新 BBR v3！\033[0m"
-        install_latest_version
+        echo -n -e "\033[1;33m╭( ･ㅂ･)و ✧ 是否要安装最新LTS版本[y/N]：\033[0m"
+        read -r ACTION
+        lts=0
+        case "$ACTION" in
+            [yY][eE][sS]|[yY])
+                echo -e "\033[1;32m(｡♥‿♥｡) 正在安装最新LTS版本...\033[0m"
+                lts=1
+                ;;
+            *)
+                echo -e "\033[1;32m(｡♥‿♥｡) 正在安装最新版本...\033[0m"
+                ;;
+        esac
+        install_latest_version $lts
         ;;
     2)
         echo -e "\033[1;32m(｡･∀･)ﾉﾞ 您选择了安装指定版本的 BBR！\033[0m"
