@@ -1,0 +1,118 @@
+name: 构建带有BBRv3的LTS内核
+
+on:
+  workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 删除旧的工作流运行记录
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          retain_days: 0       # 保留 0 天的记录
+          keep_minimum_runs: 0 # 至少保留 0 次记录
+
+  build:
+    needs: cleanup
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runs_on: ubuntu-22.04
+          - arch: arm64
+            runs_on: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runs_on }}
+    env:
+      ARCH: ${{ matrix.arch }}
+      KERNEL_VERSION: ""
+    steps:
+      - name: 获取内核版本
+        id: get_kernel_version
+        run: |
+          version=$(curl -s https://www.kernel.org \
+            | grep -A1 -m1 "longterm:" \
+            | grep -oP '\d+\.\d+\.\d+')
+          echo "KERNEL_VERSION=$version" >> $GITHUB_ENV
+
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装依赖项
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git build-essential \
+            libncurses-dev libssl-dev libelf-dev \
+            bison bc flex rsync debhelper \
+            dpkg-dev fakeroot kmod cpio dwarves \
+            lz4 zstd xz-utils curl jq
+
+      - name: 创建源码目录
+        run: mkdir -p ./kernel/linux
+
+      - name: 下载内核源代码
+        working-directory: ./kernel
+        run: |
+          branch=$(echo "${{ env.KERNEL_VERSION }}" | grep -oP '^\d+\.\d+')
+          git clone --depth=1 --branch linux-$branch.y \
+            https://github.com/gregkh/linux.git linux
+
+      - name: 添加 Google BBRv3
+        working-directory: ./kernel/linux
+        run: |
+          git remote add google-bbr https://github.com/google/bbr.git
+          git fetch google-bbr
+          git checkout google-bbr/v3
+
+      - name: 更新 Makefile 中的版本号
+        working-directory: ./kernel/linux
+        run: |
+          IFS='.' read -r v p s <<< "${{ env.KERNEL_VERSION }}"
+          sed -i "s/^VERSION *=.*/VERSION = $v/" Makefile
+          sed -i "s/^PATCHLEVEL *=.*/PATCHLEVEL = $p/" Makefile
+          sed -i "s/^SUBLEVEL *=.*/SUBLEVEL = $s/" Makefile
+
+      - name: 准备 .config
+        working-directory: ./kernel/linux
+        run: |
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            curl -sSL https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/main/arm64.config \
+              > .config
+            make ARCH=arm64 olddefconfig
+          else
+            curl -sSL https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/main/x86-64.config \
+              > .config
+            make olddefconfig
+          fi
+
+      - name: 构建内核 Debian 包
+        working-directory: ./kernel/linux
+        run: |
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            make ARCH=arm64 bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3
+          else
+            make bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3
+          fi
+
+      - name: 上传配置文件
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-${{ matrix.arch }}
+          path: ./kernel/linux/.config
+
+      - name: 上传 deb 包
+        uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: ./kernel/linux-*.deb
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ matrix.arch }}-${{ env.KERNEL_VERSION }}-LTS
+          files: ./kernel/linux-*.deb
+          body: "带有 BBRv3 的最新LTS内核，适用于 ${{ matrix.arch }} 架构"
