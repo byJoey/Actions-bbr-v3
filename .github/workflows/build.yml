@@ -82,14 +82,6 @@ jobs:
           
           tail -n 5 net/ipv4/tcp_bbr.c
 
-      - name: 更新 Makefile 中的版本号
-        working-directory: ./kernel/linux
-        run: |
-          IFS='.' read -r v p s <<< "${{ env.KERNEL_VERSION }}"
-          sed -i "s/^VERSION *=.*/VERSION = $v/" Makefile
-          sed -i "s/^PATCHLEVEL *=.*/PATCHLEVEL = $p/" Makefile
-          sed -i "s/^SUBLEVEL *=.*/SUBLEVEL = $s/" Makefile
-
       - name: 准备 .config 并禁用证书检查
         working-directory: ./kernel/linux
         run: |
