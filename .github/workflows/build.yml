@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 删除旧的工作流运行记录
+        continue-on-error: true
         uses: Mattraks/delete-workflow-runs@main
         with:
           retain_days: 0
