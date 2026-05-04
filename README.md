@@ -81,6 +81,9 @@
 **Q: 为什么下载失败啦？**  
 A: 有可能是 GitHub 链接过期了，来群里吐槽一下吧！  
 
+**Q: 提示 GitHub API rate limit exceeded 怎么办？**  
+A: 先设置 `GITHUB_TOKEN` 后再运行脚本，例如：`export GITHUB_TOKEN=你的令牌`。  
+
 **Q: 我不是 BBR 专家，不知道选哪个加速方案？**  
 A: 放心，BBR + FQ 是最常见的方案，适用于大多数场景～  
 
@@ -89,6 +92,9 @@ A: 别慌！记得备份你的内核，或者到 [Joey's Blog](https://joeyblog.
 
 **Q: CVE-2026-31431 怎么处理？**  
 A: 新版脚本会自动写入 `algif_aead` 黑名单并在构建流程中关闭 `CONFIG_CRYPTO_USER_API_AEAD`，避免暴露该漏洞利用面。  
+
+**Q: daed/dae 报 no BTF found 怎么办？**  
+A: 新构建流程已强制开启 `CONFIG_DEBUG_INFO_BTF`，升级到最新 release 并重启即可。  
 
 ---
 

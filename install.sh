@@ -6,6 +6,16 @@ if ! command -v apt-get &> /dev/null; then
     exit 1
 fi
 
+# 在 root 环境且未安装 sudo 时提供兼容包装，避免命令直接失败
+if ! command -v sudo &> /dev/null; then
+    if [[ "$(id -u)" -eq 0 ]]; then
+        sudo() { "$@"; }
+    else
+        echo -e "\033[31m缺少依赖：sudo。请先安装 sudo 后重试。\033[0m"
+        exit 1
+    fi
+fi
+
 # 检查并安装必要的依赖
 REQUIRED_CMDS=("curl" "wget" "dpkg" "awk" "sed" "sysctl" "jq")
 for cmd in "${REQUIRED_CMDS[@]}"; do
@@ -32,6 +42,39 @@ SYSCTL_CONF="/etc/sysctl.d/99-joeyblog.conf"
 MODULES_CONF="/etc/modules-load.d/joeyblog-qdisc.conf"
 # 安全加固配置（缓解 CVE-2026-31431）
 SECURITY_MODPROBE_CONF="/etc/modprobe.d/99-joeyblog-security.conf"
+# 可选：提升 GitHub API 限额（支持 GITHUB_TOKEN / GH_TOKEN）
+GITHUB_API_TOKEN="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
+
+gh_api_get() {
+    local url="$1"
+    if [[ -n "$GITHUB_API_TOKEN" ]]; then
+        curl -fsSL \
+            -H "Authorization: Bearer $GITHUB_API_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$url"
+    else
+        curl -fsSL "$url"
+    fi
+}
+
+check_release_api_response() {
+    local response="$1"
+    local api_message=""
+    api_message=$(echo "$response" | jq -r 'if type=="object" then .message // "" else "" end')
+
+    if [[ -n "$api_message" ]]; then
+        echo -e "\033[31mGitHub API 返回错误：$api_message\033[0m"
+        if echo "$api_message" | grep -qi "rate limit exceeded"; then
+            echo -e "\033[33m提示：可先执行 export GITHUB_TOKEN=你的令牌，再重新运行脚本。\033[0m"
+        fi
+        return 1
+    fi
+
+    if ! echo "$response" | jq -e 'type=="array"' > /dev/null 2>&1; then
+        echo -e "\033[31mGitHub API 返回数据格式异常，无法继续。\033[0m"
+        return 1
+    fi
+}
 
 # 函数：清理 sysctl.d 中的旧配置
 clean_sysctl_conf() {
@@ -174,6 +217,14 @@ install_packages() {
         echo -e "\033[31m错误：未在 /tmp 目录下找到内核文件，安装中止。\033[0m"
         return 1
     fi
+
+    for deb_file in /tmp/linux-*.deb; do
+        if ! dpkg-deb -I "$deb_file" > /dev/null 2>&1; then
+            echo -e "\033[31m当前系统无法读取安装包：$deb_file\033[0m"
+            echo -e "\033[33m可能原因：dpkg 版本过旧，不支持该压缩格式。建议升级 dpkg 后重试。\033[0m"
+            return 1
+        fi
+    done
     
     echo -e "\033[36m开始卸载旧版内核... \033[0m"
     INSTALLED_PACKAGES=$(dpkg -l | grep "joeyblog" | awk '{print $2}' | tr '\n' ' ')
@@ -201,11 +252,12 @@ install_packages() {
 install_latest_version() {
     echo -e "\033[36m正在从 GitHub 获取最新版本信息...\033[0m"
     BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
-    RELEASE_DATA=$(curl -sL "$BASE_URL")
+    RELEASE_DATA=$(gh_api_get "$BASE_URL")
     if [[ -z "$RELEASE_DATA" ]]; then
         echo -e "\033[31m从 GitHub 获取版本信息失败。请检查网络连接或 API 状态。\033[0m"
         return 1
     fi
+    check_release_api_response "$RELEASE_DATA" || return 1
 
     local ARCH_FILTER=""
     [[ "$ARCH" == "aarch64" ]] && ARCH_FILTER="arm64"
@@ -247,11 +299,12 @@ install_latest_version() {
 # 函数：安装指定版本
 install_specific_version() {
     BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
-    RELEASE_DATA=$(curl -s "$BASE_URL")
+    RELEASE_DATA=$(gh_api_get "$BASE_URL")
     if [[ -z "$RELEASE_DATA" ]]; then
         echo -e "\033[31m从 GitHub 获取版本信息失败。请检查网络连接或 API 状态。\033[0m"
         return 1
     fi
+    check_release_api_response "$RELEASE_DATA" || return 1
 
     local ARCH_FILTER=""
     [[ "$ARCH" == "aarch64" ]] && ARCH_FILTER="arm64"
