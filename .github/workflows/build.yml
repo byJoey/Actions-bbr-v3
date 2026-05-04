@@ -46,7 +46,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             git build-essential \
-            libncurses-dev libssl-dev libelf-dev \
+            libncurses-dev libssl-dev libelf-dev libdw-dev \
             bison bc flex rsync debhelper \
             dpkg-dev fakeroot kmod cpio dwarves \
             lz4 zstd xz-utils curl jq
