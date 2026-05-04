@@ -30,6 +30,8 @@ CURRENT_QDISC=$(sysctl net.core.default_qdisc | awk '{print $3}')
 SYSCTL_CONF="/etc/sysctl.d/99-joeyblog.conf"
 # 模块自动加载配置文件路径
 MODULES_CONF="/etc/modules-load.d/joeyblog-qdisc.conf"
+# 安全加固配置（缓解 CVE-2026-31431）
+SECURITY_MODPROBE_CONF="/etc/modprobe.d/99-joeyblog-security.conf"
 
 # 函数：清理 sysctl.d 中的旧配置
 clean_sysctl_conf() {
@@ -64,6 +66,32 @@ load_qdisc_module() {
     else
         echo -e "\033[33m⚠ 模块 $module_name 加载失败，可能内核不支持\033[0m"
         return 1
+    fi
+}
+
+# 函数：应用 CVE-2026-31431 防护（禁用 algif_aead）
+apply_cve_2026_31431_mitigation() {
+    local changed=0
+    if [[ ! -f "$SECURITY_MODPROBE_CONF" ]] || ! grep -q "algif_aead" "$SECURITY_MODPROBE_CONF"; then
+        cat <<'EOF' | sudo tee "$SECURITY_MODPROBE_CONF" > /dev/null
+# Managed by Actions-bbr-v3
+# CVE-2026-31431 mitigation: block loading algif_aead from userspace path.
+blacklist algif_aead
+install algif_aead /bin/false
+EOF
+        changed=1
+    fi
+
+    if lsmod | grep -q "^algif_aead"; then
+        if sudo modprobe -r algif_aead 2>/dev/null; then
+            echo -e "\033[1;32m✔ 已卸载 algif_aead 模块，当前会话已完成缓解\033[0m"
+        else
+            echo -e "\033[33m⚠ algif_aead 当前被占用，已写入黑名单，重启后将生效\033[0m"
+        fi
+    fi
+
+    if [[ "$changed" -eq 1 ]]; then
+        echo -e "\033[1;32m✔ 已写入安全策略：$SECURITY_MODPROBE_CONF\033[0m"
     fi
 }
 
@@ -275,6 +303,7 @@ print_separator() {
 # --- 主要执行流程 ---
 
 clear
+apply_cve_2026_31431_mitigation
 print_separator
 echo -e "\033[1;35m(☆ω☆)✧*｡ 欢迎来到 BBR 管理脚本世界哒！ ✧*｡(☆ω☆)\033[0m"
 print_separator
@@ -336,6 +365,13 @@ case "$ACTION" in
             echo -e "\033[1;32mヽ(✿ﾟ▽ﾟ)ノ 检测完成，BBR v3 已正确安装并生效！\033[0m"
         else
             echo -e "\033[33mBBR v3 未完全生效。请确保已安装内核并重启，然后使用选项 4-7 启用。\033[0m"
+        fi
+
+        if grep -Eq '^\s*blacklist\s+algif_aead' "$SECURITY_MODPROBE_CONF" 2>/dev/null; then
+            echo -e "\033[1;32m✔ CVE-2026-31431 缓解状态：已启用（algif_aead 已黑名单）\033[0m"
+        else
+            echo -e "\033[31m✘ CVE-2026-31431 缓解状态：未启用\033[0m"
+            echo -e "\033[33m  建议重新运行脚本，或手动写入 $SECURITY_MODPROBE_CONF\033[0m"
         fi
         ;;
     4)

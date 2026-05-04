@@ -33,6 +33,7 @@
 ⚙️ **开启/关闭 BBR 加速**  
 🗑️ **卸载内核，告别不需要的内核版本**  
 👀 **实时查看当前 TCP 拥塞算法和队列算法**  
+🛡️ **默认启用 CVE-2026-31431 缓解（禁用 `algif_aead`）**  
 🎨 **美化的输出界面，让脚本更有灵魂**  
 
 ---
@@ -42,6 +43,16 @@
 1. **一键运行**  
    ```bash
    bash <(curl -l -s https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/refs/heads/main/install.sh)
+   ```
+
+2. **验证 CVE-2026-31431 缓解是否启用**  
+   ```bash
+   grep -E 'blacklist[[:space:]]+algif_aead|install[[:space:]]+algif_aead[[:space:]]+/bin/false' /etc/modprobe.d/99-joeyblog-security.conf
+   ```
+
+3. **验证内核配置是否关闭 AEAD 用户态接口**  
+   ```bash
+   grep '^# CONFIG_CRYPTO_USER_API_AEAD is not set' /boot/config-$(uname -r)
    ```
 
 ---
@@ -75,6 +86,9 @@ A: 放心，BBR + FQ 是最常见的方案，适用于大多数场景～
 
 **Q: 如果不小心把系统搞崩了怎么办？**  
 A: 别慌！记得备份你的内核，或者到 [Joey's Blog](https://joeyblog.net) 查看修复教程。
+
+**Q: CVE-2026-31431 怎么处理？**  
+A: 新版脚本会自动写入 `algif_aead` 黑名单并在构建流程中关闭 `CONFIG_CRYPTO_USER_API_AEAD`，避免暴露该漏洞利用面。  
 
 ---
 

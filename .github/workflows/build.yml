@@ -97,12 +97,39 @@ jobs:
 
           scripts/config --disable SYSTEM_TRUSTED_KEYS
           scripts/config --disable SYSTEM_REVOCATION_KEYS
+          # Mitigation for CVE-2026-31431 attack surface: do not expose userspace AEAD API.
+          scripts/config --disable CRYPTO_USER_API_AEAD
           
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             make ARCH=arm64 olddefconfig
           else
             make olddefconfig
           fi
+
+          # Enforce CI security gate so vulnerable config never gets released.
+          if ! grep -q '^# CONFIG_CRYPTO_USER_API_AEAD is not set' .config; then
+            echo "ERROR: CONFIG_CRYPTO_USER_API_AEAD is enabled; refusing to continue."
+            exit 1
+          fi
+
+      - name: 安全自检（阻断 CVE-2026-31431 风险发布）
+        working-directory: ./kernel/linux
+        run: |
+          set -euo pipefail
+
+          echo "[SECURITY] checking CRYPTO_USER_API_AEAD state..."
+          state="$(scripts/config --state CRYPTO_USER_API_AEAD || true)"
+          if [ "$state" != "n" ]; then
+            echo "[SECURITY][FAIL] CRYPTO_USER_API_AEAD state is '$state' (expected 'n')"
+            exit 1
+          fi
+
+          if grep -n '^CONFIG_CRYPTO_USER_API_AEAD=' .config; then
+            echo "[SECURITY][FAIL] .config still enables CRYPTO_USER_API_AEAD"
+            exit 1
+          fi
+
+          echo "[SECURITY][PASS] CRYPTO_USER_API_AEAD is disabled; release can continue."
 
       - name: 构建内核 Debian 包
         working-directory: ./kernel/linux
