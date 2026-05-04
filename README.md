@@ -55,6 +55,16 @@
    grep '^# CONFIG_CRYPTO_USER_API_AEAD is not set' /boot/config-$(uname -r)
    ```
 
+4. **运行 CVE-2026-31431 风险面检测脚本（仅检测，不利用）**  
+   ```bash
+   python3 cve_2026_31431_detector.py
+   ```
+
+   输出说明：
+   - `HIGH-RISK SURFACE detected`：风险面暴露，建议立即升级并收敛配置
+   - `Surface appears mitigated/reduced`：风险面已收敛
+   - `Inconclusive`：信息不足，需继续核查内核补丁级别
+
 ---
 
 ### 🌟 操作界面  
