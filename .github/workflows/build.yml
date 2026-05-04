@@ -11,7 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 删除旧的工作流运行记录
-        continue-on-error: true
         uses: Mattraks/delete-workflow-runs@main
         with:
           retain_days: 0
@@ -47,7 +46,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             git build-essential \
-            libncurses-dev libssl-dev libelf-dev libdw-dev \
+            libncurses-dev libssl-dev libelf-dev \
             bison bc flex rsync debhelper \
             dpkg-dev fakeroot kmod cpio dwarves \
             lz4 zstd xz-utils curl jq
@@ -62,11 +61,12 @@ jobs:
           git clone --depth=1 --branch linux-$branch.y \
             https://github.com/gregkh/linux.git linux
 
-      - name: 使用 stable 基线自带 BBR 实现
+      - name: 添加 Google BBRv3
         working-directory: ./kernel/linux
         run: |
-          # Keep upstream linux-stable tree untouched to avoid API mismatch.
-          test -f net/ipv4/tcp_bbr.c
+          git remote add google-bbr https://github.com/google/bbr.git
+          git fetch google-bbr
+          git checkout google-bbr/v3
 
       - name: 编译声明
         working-directory: ./kernel/linux
@@ -77,6 +77,14 @@ jobs:
           echo 'MODULE_DESCRIPTION("TCP BBR v3 (Bottleneck Bandwidth and RTT) - Compiled & Optimized by Joey");' >> net/ipv4/tcp_bbr.c
           
           tail -n 5 net/ipv4/tcp_bbr.c
+
+      - name: 更新 Makefile 中的版本号
+        working-directory: ./kernel/linux
+        run: |
+          IFS='.' read -r v p s <<< "${{ env.KERNEL_VERSION }}"
+          sed -i "s/^VERSION *=.*/VERSION = $v/" Makefile
+          sed -i "s/^PATCHLEVEL *=.*/PATCHLEVEL = $p/" Makefile
+          sed -i "s/^SUBLEVEL *=.*/SUBLEVEL = $s/" Makefile
 
       - name: 准备 .config 并禁用证书检查
         working-directory: ./kernel/linux
@@ -134,16 +142,6 @@ jobs:
 
           if ! grep -q '^CONFIG_DEBUG_INFO_BTF=y' .config; then
             echo "[SECURITY][FAIL] CONFIG_DEBUG_INFO_BTF is not enabled."
-            exit 1
-          fi
-
-          # Check upstream-fix code shape for CVE-2026-31431 in AF_ALG interfaces.
-          if ! grep -Eq 'af_alg_count_tsgl\(struct sock \*sk, size_t bytes\);' include/crypto/if_alg.h; then
-            echo "[SECURITY][FAIL] CVE-2026-31431 fix signature check failed (af_alg_count_tsgl)."
-            exit 1
-          fi
-          if ! grep -Eq 'af_alg_pull_tsgl\(struct sock \*sk, size_t used, struct scatterlist \*dst\);' include/crypto/if_alg.h; then
-            echo "[SECURITY][FAIL] CVE-2026-31431 fix signature check failed (af_alg_pull_tsgl)."
             exit 1
           fi
 

@@ -45,18 +45,15 @@
    bash <(curl -l -s https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/refs/heads/main/install.sh)
    ```
 
-2. **运行 CVE-2026-31431 风险面检测脚本（仅检测，不利用）**  
+2. **验证 CVE-2026-31431 缓解是否启用**  
    ```bash
-   command -v python3 >/dev/null 2>&1 || (sudo apt update && sudo apt install -y python3)
-   curl -fsSL -o cve_2026_31431_detector.py https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/main/cve_2026_31431_detector.py
-   chmod +x cve_2026_31431_detector.py
-   sudo python3 cve_2026_31431_detector.py
+   grep -E 'blacklist[[:space:]]+algif_aead|install[[:space:]]+algif_aead[[:space:]]+/bin/false' /etc/modprobe.d/99-joeyblog-security.conf
    ```
 
-   输出说明：
-   - `检测到高风险暴露面`：风险面暴露，建议立即升级并收敛配置
-   - `风险面已收敛/已缓解`：当前风险面已收敛
-   - `结果不确定`：信息不足，需继续核查内核补丁级别
+3. **验证内核配置是否关闭 AEAD 用户态接口**  
+   ```bash
+   grep '^# CONFIG_CRYPTO_USER_API_AEAD is not set' /boot/config-$(uname -r)
+   ```
 
 ---
 
