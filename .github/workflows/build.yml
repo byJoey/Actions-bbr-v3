@@ -61,12 +61,16 @@ jobs:
           git clone --depth=1 --branch linux-$branch.y \
             https://github.com/gregkh/linux.git linux
 
-      - name: 添加 Google BBRv3
+      - name: 导入 Google BBRv3 代码（保留 stable 基线）
         working-directory: ./kernel/linux
         run: |
           git remote add google-bbr https://github.com/google/bbr.git
-          git fetch google-bbr
-          git checkout google-bbr/v3
+          git fetch --depth=1 google-bbr v3
+          # Keep linux-stable as build base, only import BBRv3 implementation files.
+          git checkout google-bbr/v3 -- net/ipv4/tcp_bbr.c
+          if git cat-file -e google-bbr/v3:net/ipv4/tcp_bbr.h 2>/dev/null; then
+            git checkout google-bbr/v3 -- net/ipv4/tcp_bbr.h
+          fi
 
       - name: 编译声明
         working-directory: ./kernel/linux
@@ -142,6 +146,16 @@ jobs:
 
           if ! grep -q '^CONFIG_DEBUG_INFO_BTF=y' .config; then
             echo "[SECURITY][FAIL] CONFIG_DEBUG_INFO_BTF is not enabled."
+            exit 1
+          fi
+
+          # Check upstream-fix code shape for CVE-2026-31431 in AF_ALG interfaces.
+          if ! grep -Eq 'af_alg_count_tsgl\(struct sock \*sk, size_t bytes\);' include/crypto/if_alg.h; then
+            echo "[SECURITY][FAIL] CVE-2026-31431 fix signature check failed (af_alg_count_tsgl)."
+            exit 1
+          fi
+          if ! grep -Eq 'af_alg_pull_tsgl\(struct sock \*sk, size_t used, struct scatterlist \*dst\);' include/crypto/if_alg.h; then
+            echo "[SECURITY][FAIL] CVE-2026-31431 fix signature check failed (af_alg_pull_tsgl)."
             exit 1
           fi
 
