@@ -57,7 +57,10 @@
 
 4. **运行 CVE-2026-31431 风险面检测脚本（仅检测，不利用）**  
    ```bash
-   python3 cve_2026_31431_detector.py
+   command -v python3 >/dev/null 2>&1 || (sudo apt update && sudo apt install -y python3)
+   curl -fsSL -o cve_2026_31431_detector.py https://raw.githubusercontent.com/byJoey/Actions-bbr-v3/main/cve_2026_31431_detector.py
+   chmod +x cve_2026_31431_detector.py
+   sudo python3 cve_2026_31431_detector.py
    ```
 
    输出说明：
