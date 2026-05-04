@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
-CVE-2026-31431 surface detector (safe check, non-exploit)
+CVE-2026-31431 风险面检测脚本（仅检测，不利用）
 
-This script checks whether the system exposes a risky surface:
-1) CONFIG_CRYPTO_USER_API_AEAD in kernel config
-2) algif_aead module load state
-3) AF_ALG AEAD bind availability from userspace
+检测项：
+1) 内核配置里的 CONFIG_CRYPTO_USER_API_AEAD
+2) algif_aead 模块加载状态
+3) 用户态是否可用 AF_ALG AEAD bind
 """
 
 import gzip
@@ -37,14 +37,14 @@ def read_kernel_config(kernel_release: str) -> Optional[str]:
 
 def parse_aead_config(config_text: Optional[str]) -> str:
     if not config_text:
-        return "unknown (config not found)"
+        return "未知（未找到内核配置）"
 
     for line in config_text.splitlines():
         if line.startswith("CONFIG_CRYPTO_USER_API_AEAD="):
             return line.split("=", 1)[1].strip()
         if line.strip() == "# CONFIG_CRYPTO_USER_API_AEAD is not set":
             return "n"
-    return "unknown (symbol not present)"
+    return "未知（配置项不存在）"
 
 
 def is_module_loaded(module_name: str) -> bool:
@@ -65,13 +65,13 @@ def check_af_alg_aead_bind() -> Tuple[bool, str]:
     try:
         sock = socket.socket(af_alg, sock_type, 0)
     except OSError as e:
-        return False, f"create socket failed: {e}"
+        return False, f"创建 socket 失败: {e}"
 
     try:
         sock.bind(("aead", "authencesn(hmac(sha256),cbc(aes))"))
-        return True, "bind ok"
+        return True, "bind 成功"
     except OSError as e:
-        return False, f"bind failed: {e}"
+        return False, f"bind 失败: {e}"
     finally:
         try:
             sock.close()
@@ -86,24 +86,24 @@ def main() -> None:
     mod_loaded = is_module_loaded("algif_aead")
     bind_ok, bind_msg = check_af_alg_aead_bind()
 
-    print(f"[*] Kernel: {kernel}")
+    print(f"[*] 当前内核: {kernel}")
     print(f"[*] CONFIG_CRYPTO_USER_API_AEAD: {aead_cfg}")
-    print(f"[*] algif_aead loaded: {mod_loaded}")
-    print(f"[*] AF_ALG AEAD bind: {bind_ok} ({bind_msg})")
+    print(f"[*] algif_aead 已加载: {mod_loaded}")
+    print(f"[*] AF_ALG AEAD bind 可用: {bind_ok} ({bind_msg})")
     print("")
-    print("[Result]")
+    print("[检测结论]")
 
     high_risk_surface = (aead_cfg in {"y", "m"}) and bind_ok
     reduced_surface = (aead_cfg == "n") or (not bind_ok)
 
     if high_risk_surface:
-        print("[!] HIGH-RISK SURFACE detected.")
-        print("[!] If kernel patch is missing, system may be exposed to CVE-2026-31431.")
-        print("[!] Recommendation: upgrade kernel, disable CRYPTO_USER_API_AEAD, or block algif_aead.")
+        print("[!] 检测到高风险暴露面。")
+        print("[!] 若内核未包含上游修复补丁，系统可能受 CVE-2026-31431 影响。")
+        print("[!] 建议：升级内核，禁用 CRYPTO_USER_API_AEAD，或屏蔽 algif_aead。")
     elif reduced_surface:
-        print("[+] Surface appears mitigated/reduced.")
+        print("[+] 风险面已收敛/已缓解。")
     else:
-        print("[?] Inconclusive. Please verify kernel patch level manually.")
+        print("[?] 结果不确定，请继续核对内核补丁级别。")
 
 
 if __name__ == "__main__":
