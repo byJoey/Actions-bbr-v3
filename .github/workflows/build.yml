@@ -22,25 +22,23 @@ jobs:
     strategy:
       matrix:
         include:
-          - track: bbr-v3
-            arch: x86_64
+          - arch: x86_64
             runs_on: ubuntu-latest
-          - track: bbr-v3
-            arch: arm64
-            runs_on: ubuntu-24.04-arm
-          - track: latest-stable
-            arch: x86_64
-            runs_on: ubuntu-latest
-          - track: latest-stable
-            arch: arm64
+          - arch: arm64
             runs_on: ubuntu-24.04-arm
     runs-on: ${{ matrix.runs_on }}
     env:
-      TRACK: ${{ matrix.track }}
       ARCH: ${{ matrix.arch }}
       KERNEL_VERSION: ""
-      LOCALVERSION_SUFFIX: ""
     steps:
+      - name: 获取内核版本
+        id: get_kernel_version
+        run: |
+          version=$(curl -s https://www.kernel.org \
+            | grep -A1 -m1 "stable:" \
+            | grep -oP '\d+\.\d+\.\d+')
+          echo "KERNEL_VERSION=$version" >> $GITHUB_ENV
+
       - name: 检出代码
         uses: actions/checkout@v4
 
@@ -60,24 +58,15 @@ jobs:
       - name: 下载内核源代码
         working-directory: ./kernel
         run: |
-          if [ "${{ matrix.track }}" = "bbr-v3" ]; then
-            git clone --depth=1 --branch v3 https://github.com/google/bbr.git linux
-            echo "LOCALVERSION_SUFFIX=-joeyblog-bbrv3" >> $GITHUB_ENV
-          else
-            version=$(curl -s https://www.kernel.org \
-              | grep -A1 -m1 "stable:" \
-              | grep -oP '\d+\.\d+\.\d+')
-            branch=$(echo "$version" | grep -oP '^\d+\.\d+')
-            git clone --depth=1 --branch linux-$branch.y \
-              https://github.com/gregkh/linux.git linux
-            echo "LOCALVERSION_SUFFIX=-joeyblog-stable" >> $GITHUB_ENV
-          fi
+          branch=$(echo "${{ env.KERNEL_VERSION }}" | grep -oP '^\d+\.\d+')
+          git clone --depth=1 --branch linux-$branch.y \
+            https://github.com/gregkh/linux.git linux
 
-      - name: 从源码读取版本号
+      - name: 使用 stable 基线自带 BBR 实现
         working-directory: ./kernel/linux
         run: |
-          echo "KERNEL_VERSION=$(make -s kernelversion)" >> $GITHUB_ENV
-          echo "Kernel version from source: $(make -s kernelversion)"
+          # Keep upstream linux-stable tree untouched to avoid API mismatch.
+          test -f net/ipv4/tcp_bbr.c
 
       - name: 编译声明
         working-directory: ./kernel/linux
@@ -85,11 +74,7 @@ jobs:
           grep -v "MODULE_DESCRIPTION" net/ipv4/tcp_bbr.c > net/ipv4/tcp_bbr.c.tmp
           mv net/ipv4/tcp_bbr.c.tmp net/ipv4/tcp_bbr.c
           
-          if [ "${{ matrix.track }}" = "bbr-v3" ]; then
-            echo 'MODULE_DESCRIPTION("TCP BBR v3 (Bottleneck Bandwidth and RTT) - Compiled & Optimized by Joey");' >> net/ipv4/tcp_bbr.c
-          else
-            echo 'MODULE_DESCRIPTION("TCP BBR (latest-stable baseline) - Compiled & Optimized by Joey");' >> net/ipv4/tcp_bbr.c
-          fi
+          echo 'MODULE_DESCRIPTION("TCP BBR v3 (Bottleneck Bandwidth and RTT) - Compiled & Optimized by Joey");' >> net/ipv4/tcp_bbr.c
           
           tail -n 5 net/ipv4/tcp_bbr.c
 
@@ -152,32 +137,42 @@ jobs:
             exit 1
           fi
 
+          # Check upstream-fix code shape for CVE-2026-31431 in AF_ALG interfaces.
+          if ! grep -Eq 'af_alg_count_tsgl\(struct sock \*sk, size_t bytes\);' include/crypto/if_alg.h; then
+            echo "[SECURITY][FAIL] CVE-2026-31431 fix signature check failed (af_alg_count_tsgl)."
+            exit 1
+          fi
+          if ! grep -Eq 'af_alg_pull_tsgl\(struct sock \*sk, size_t used, struct scatterlist \*dst\);' include/crypto/if_alg.h; then
+            echo "[SECURITY][FAIL] CVE-2026-31431 fix signature check failed (af_alg_pull_tsgl)."
+            exit 1
+          fi
+
           echo "[SECURITY][PASS] CRYPTO_USER_API_AEAD disabled and BTF enabled; release can continue."
 
       - name: 构建内核 Debian 包
         working-directory: ./kernel/linux
         run: |
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            make ARCH=arm64 bindeb-pkg -j$(nproc) LOCALVERSION="$LOCALVERSION_SUFFIX" KDEB_COMPRESS=gzip
+            make ARCH=arm64 bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3 KDEB_COMPRESS=gzip
           else
-            make bindeb-pkg -j$(nproc) LOCALVERSION="$LOCALVERSION_SUFFIX" KDEB_COMPRESS=gzip
+            make bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3 KDEB_COMPRESS=gzip
           fi
 
       - name: 上传配置文件
         uses: actions/upload-artifact@v4
         with:
-          name: config-${{ matrix.track }}-${{ matrix.arch }}
+          name: config-${{ matrix.arch }}
           path: ./kernel/linux/.config
 
       - name: 上传 deb 包
         uses: actions/upload-artifact@v4
         with:
-          name: deb-${{ matrix.track }}-${{ matrix.arch }}
+          name: deb-${{ matrix.arch }}
           path: ./kernel/linux-*.deb
 
       - name: 发布到 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ matrix.track }}-${{ matrix.arch }}-${{ env.KERNEL_VERSION }}
+          tag_name: ${{ matrix.arch }}-${{ env.KERNEL_VERSION }}
           files: ./kernel/linux-*.deb
-          body: "轨道：${{ matrix.track }}；架构：${{ matrix.arch }}；内核版本：${{ env.KERNEL_VERSION }}。Compiled & Optimized by Joey."
+          body: "带有 BBRv3 的最新内核，适用于 ${{ matrix.arch }} 架构。Compiled & Optimized by Joey."
