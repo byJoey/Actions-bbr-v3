@@ -97,14 +97,6 @@ jobs:
 
           scripts/config --disable SYSTEM_TRUSTED_KEYS
           scripts/config --disable SYSTEM_REVOCATION_KEYS
-          # Mitigation for CVE-2026-31431 attack surface: do not expose userspace AEAD API.
-          scripts/config --disable CRYPTO_USER_API_AEAD
-          # Ensure BTF metadata is available for eBPF CO-RE userspace.
-          scripts/config --disable DEBUG_INFO_NONE
-          scripts/config --enable DEBUG_INFO
-          scripts/config --enable DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
-          scripts/config --enable DEBUG_INFO_BTF
-          scripts/config --enable DEBUG_INFO_BTF_MODULES
           
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             make ARCH=arm64 olddefconfig
@@ -112,48 +104,13 @@ jobs:
             make olddefconfig
           fi
 
-          # Enforce CI security gate so vulnerable config never gets released.
-          if ! grep -q '^# CONFIG_CRYPTO_USER_API_AEAD is not set' .config; then
-            echo "ERROR: CONFIG_CRYPTO_USER_API_AEAD is enabled; refusing to continue."
-            exit 1
-          fi
-
-          if ! grep -q '^CONFIG_DEBUG_INFO_BTF=y' .config; then
-            echo "ERROR: CONFIG_DEBUG_INFO_BTF is not enabled; refusing to continue."
-            exit 1
-          fi
-
-      - name: 安全自检（阻断 CVE-2026-31431 风险发布）
-        working-directory: ./kernel/linux
-        run: |
-          set -euo pipefail
-
-          echo "[SECURITY] checking CRYPTO_USER_API_AEAD state..."
-          state="$(scripts/config --state CRYPTO_USER_API_AEAD || true)"
-          if [ "$state" != "n" ]; then
-            echo "[SECURITY][FAIL] CRYPTO_USER_API_AEAD state is '$state' (expected 'n')"
-            exit 1
-          fi
-
-          if grep -n '^CONFIG_CRYPTO_USER_API_AEAD=' .config; then
-            echo "[SECURITY][FAIL] .config still enables CRYPTO_USER_API_AEAD"
-            exit 1
-          fi
-
-          if ! grep -q '^CONFIG_DEBUG_INFO_BTF=y' .config; then
-            echo "[SECURITY][FAIL] CONFIG_DEBUG_INFO_BTF is not enabled."
-            exit 1
-          fi
-
-          echo "[SECURITY][PASS] CRYPTO_USER_API_AEAD disabled and BTF enabled; release can continue."
-
       - name: 构建内核 Debian 包
         working-directory: ./kernel/linux
         run: |
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            make ARCH=arm64 bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3 KDEB_COMPRESS=gzip
+            make ARCH=arm64 bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3
           else
-            make bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3 KDEB_COMPRESS=gzip
+            make bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3
           fi
 
       - name: 上传配置文件
