@@ -108,9 +108,9 @@ jobs:
         working-directory: ./kernel/linux
         run: |
           if [ "${{ matrix.arch }}" = "arm64" ]; then
-            make ARCH=arm64 bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3
+            make ARCH=arm64 bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3 KDEB_COMPRESS=gzip skipdbg=true
           else
-            make bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3
+            make bindeb-pkg -j$(nproc) LOCALVERSION=-joeyblog-bbrv3 KDEB_COMPRESS=gzip skipdbg=true
           fi
 
       - name: 上传配置文件
