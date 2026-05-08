@@ -305,7 +305,10 @@ install_latest_version() {
     fi
 
     echo -e "\033[33m发现新版本或未安装内核，准备下载...\033[0m"
-    ASSET_URLS=$(echo "$RELEASE_DATA" | jq -r --arg tag "$LATEST_TAG_NAME" '.[] | select(.tag_name == $tag) | .assets[].browser_download_url')
+    ASSET_URLS=$(echo "$RELEASE_DATA" | jq -r --arg tag "$LATEST_TAG_NAME" '
+      .[] | select(.tag_name == $tag) | .assets[].browser_download_url
+      | select(test("(-dbg_|-dbgsym_)"; "i") | not)
+    ')
     
     rm -f /tmp/linux-*.deb
 
@@ -357,7 +360,10 @@ install_specific_version() {
     SELECTED_TAG="${TAG_ARRAY[$INDEX]}"
     echo -e "\033[36m已选择版本：\033[0m\033[1;32m$SELECTED_TAG\033[0m"
 
-    ASSET_URLS=$(echo "$RELEASE_DATA" | jq -r --arg tag "$SELECTED_TAG" '.[] | select(.tag_name == $tag) | .assets[].browser_download_url')
+    ASSET_URLS=$(echo "$RELEASE_DATA" | jq -r --arg tag "$SELECTED_TAG" '
+      .[] | select(.tag_name == $tag) | .assets[].browser_download_url
+      | select(test("(-dbg_|-dbgsym_)"; "i") | not)
+    ')
     
     rm -f /tmp/linux-*.deb
     
