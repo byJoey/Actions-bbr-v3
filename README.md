@@ -34,6 +34,7 @@
 🗑️ **卸载内核，告别不需要的内核版本**  
 👀 **实时查看当前 TCP 拥塞算法和队列算法**  
 🛡️ **默认启用 CVE-2026-31431 缓解（禁用 `algif_aead`）**  
+🛡️ **默认启用 Dirty Frag 缓解（屏蔽 `esp4/esp6/rxrpc`）**  
 🎨 **美化的输出界面，让脚本更有灵魂**  
 
 ---
@@ -98,6 +99,9 @@ A: 新版脚本会自动写入 `algif_aead` 黑名单并在构建流程中关闭
 
 **Q: daed/dae 报 no BTF found 怎么办？**  
 A: 新构建流程已强制开启 `CONFIG_DEBUG_INFO_BTF`，升级到最新 release 并重启即可。  
+
+**Q: Dirty Frag 怎么处理？**  
+A: 新版构建会关闭 `XFRM_ESP/INET_ESP/INET6_ESP/AF_RXRPC`，脚本运行时会写入 `esp4/esp6/rxrpc` 黑名单并尝试卸载模块。  
 
 ---
 

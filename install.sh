@@ -112,26 +112,47 @@ load_qdisc_module() {
     fi
 }
 
-# 函数：应用 CVE-2026-31431 防护（禁用 algif_aead）
-apply_cve_2026_31431_mitigation() {
+# 函数：确保安全规则存在（不存在则追加）
+ensure_security_rule() {
+    local rule="$1"
+    local changed_var="$2"
+    if ! grep -Fqx "$rule" "$SECURITY_MODPROBE_CONF" 2>/dev/null; then
+        echo "$rule" | sudo tee -a "$SECURITY_MODPROBE_CONF" > /dev/null
+        eval "$changed_var=1"
+    fi
+}
+
+# 函数：应用安全缓解（CVE-2026-31431 + Dirty Frag）
+apply_security_mitigations() {
     local changed=0
-    if [[ ! -f "$SECURITY_MODPROBE_CONF" ]] || ! grep -q "algif_aead" "$SECURITY_MODPROBE_CONF"; then
-        cat <<'EOF' | sudo tee "$SECURITY_MODPROBE_CONF" > /dev/null
-# Managed by Actions-bbr-v3
-# CVE-2026-31431 mitigation: block loading algif_aead from userspace path.
-blacklist algif_aead
-install algif_aead /bin/false
-EOF
+
+    sudo touch "$SECURITY_MODPROBE_CONF"
+    if ! grep -Fqx "# Managed by Actions-bbr-v3" "$SECURITY_MODPROBE_CONF" 2>/dev/null; then
+        echo "# Managed by Actions-bbr-v3" | sudo tee -a "$SECURITY_MODPROBE_CONF" > /dev/null
         changed=1
     fi
 
-    if lsmod | grep -q "^algif_aead"; then
-        if sudo modprobe -r algif_aead 2>/dev/null; then
-            echo -e "\033[1;32m✔ 已卸载 algif_aead 模块，当前会话已完成缓解\033[0m"
-        else
-            echo -e "\033[33m⚠ algif_aead 当前被占用，已写入黑名单，重启后将生效\033[0m"
+    # CVE-2026-31431 mitigation
+    ensure_security_rule "blacklist algif_aead" changed
+    ensure_security_rule "install algif_aead /bin/false" changed
+
+    # Dirty Frag mitigation
+    ensure_security_rule "blacklist esp4" changed
+    ensure_security_rule "install esp4 /bin/false" changed
+    ensure_security_rule "blacklist esp6" changed
+    ensure_security_rule "install esp6 /bin/false" changed
+    ensure_security_rule "blacklist rxrpc" changed
+    ensure_security_rule "install rxrpc /bin/false" changed
+
+    for mod in algif_aead esp4 esp6 rxrpc; do
+        if lsmod | grep -q "^$mod"; then
+            if sudo modprobe -r "$mod" 2>/dev/null; then
+                echo -e "\033[1;32m✔ 已卸载 $mod 模块，当前会话已完成缓解\033[0m"
+            else
+                echo -e "\033[33m⚠ $mod 当前被占用，已写入黑名单，重启后将生效\033[0m"
+            fi
         fi
-    fi
+    done
 
     if [[ "$changed" -eq 1 ]]; then
         echo -e "\033[1;32m✔ 已写入安全策略：$SECURITY_MODPROBE_CONF\033[0m"
@@ -356,7 +377,7 @@ print_separator() {
 # --- 主要执行流程 ---
 
 clear
-apply_cve_2026_31431_mitigation
+apply_security_mitigations
 print_separator
 echo -e "\033[1;35m(☆ω☆)✧*｡ 欢迎来到 BBR 管理脚本世界哒！ ✧*｡(☆ω☆)\033[0m"
 print_separator
@@ -424,6 +445,15 @@ case "$ACTION" in
             echo -e "\033[1;32m✔ CVE-2026-31431 缓解状态：已启用（algif_aead 已黑名单）\033[0m"
         else
             echo -e "\033[31m✘ CVE-2026-31431 缓解状态：未启用\033[0m"
+            echo -e "\033[33m  建议重新运行脚本，或手动写入 $SECURITY_MODPROBE_CONF\033[0m"
+        fi
+
+        if grep -Eq '^\s*blacklist\s+esp4' "$SECURITY_MODPROBE_CONF" 2>/dev/null \
+           && grep -Eq '^\s*blacklist\s+esp6' "$SECURITY_MODPROBE_CONF" 2>/dev/null \
+           && grep -Eq '^\s*blacklist\s+rxrpc' "$SECURITY_MODPROBE_CONF" 2>/dev/null; then
+            echo -e "\033[1;32m✔ Dirty Frag 缓解状态：已启用（esp4/esp6/rxrpc 已黑名单）\033[0m"
+        else
+            echo -e "\033[31m✘ Dirty Frag 缓解状态：未启用\033[0m"
             echo -e "\033[33m  建议重新运行脚本，或手动写入 $SECURITY_MODPROBE_CONF\033[0m"
         fi
         ;;

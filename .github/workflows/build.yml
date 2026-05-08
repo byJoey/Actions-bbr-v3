@@ -97,11 +97,33 @@ jobs:
 
           scripts/config --disable SYSTEM_TRUSTED_KEYS
           scripts/config --disable SYSTEM_REVOCATION_KEYS
+          # Mitigation for Dirty Frag attack surface.
+          scripts/config --disable XFRM_ESP
+          scripts/config --disable INET_ESP
+          scripts/config --disable INET6_ESP
+          scripts/config --disable AF_RXRPC
           
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             make ARCH=arm64 olddefconfig
           else
             make olddefconfig
+          fi
+
+          if grep -q '^CONFIG_XFRM_ESP=' .config; then
+            echo "ERROR: CONFIG_XFRM_ESP is enabled; refusing to continue."
+            exit 1
+          fi
+          if grep -q '^CONFIG_INET_ESP=' .config; then
+            echo "ERROR: CONFIG_INET_ESP is enabled; refusing to continue."
+            exit 1
+          fi
+          if grep -q '^CONFIG_INET6_ESP=' .config; then
+            echo "ERROR: CONFIG_INET6_ESP is enabled; refusing to continue."
+            exit 1
+          fi
+          if grep -q '^CONFIG_AF_RXRPC=' .config; then
+            echo "ERROR: CONFIG_AF_RXRPC is enabled; refusing to continue."
+            exit 1
           fi
 
       - name: 构建内核 Debian 包
