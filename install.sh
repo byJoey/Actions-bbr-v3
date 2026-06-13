@@ -77,6 +77,56 @@ check_release_api_response() {
     fi
 }
 
+version_ge() {
+    local current="$1"
+    local required="$2"
+    [[ "$(printf '%s\n' "$required" "$current" | sort -V | head -n 1)" == "$required" ]]
+}
+
+# 函数：限制旧系统安装 7.x 主线内核，避免启动失败或 kernel panic
+assert_supported_kernel_install_system() {
+    local os_id=""
+    local os_version=""
+    local os_name=""
+    local min_version=""
+    local distro_name=""
+
+    if [[ ! -r /etc/os-release ]]; then
+        echo -e "\033[31m无法识别当前系统版本，已拒绝安装 7.x 主线内核。\033[0m"
+        echo -e "\033[33m请先升级到 Ubuntu 22.04+ 或 Debian 12+ 后再安装。\033[0m"
+        return 1
+    fi
+
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    os_id="${ID:-}"
+    os_version="${VERSION_ID:-}"
+    os_name="${PRETTY_NAME:-${NAME:-未知系统}}"
+
+    case "$os_id" in
+        ubuntu)
+            min_version="22.04"
+            distro_name="Ubuntu"
+            ;;
+        debian)
+            min_version="12"
+            distro_name="Debian"
+            ;;
+        *)
+            echo -e "\033[31m当前系统为 $os_name，不在 7.x 主线内核安装白名单内。\033[0m"
+            echo -e "\033[33m请使用 Ubuntu 22.04+ 或 Debian 12+，旧系统/衍生系统可能因用户态、initramfs 或引导链路过旧导致 kernel panic。\033[0m"
+            return 1
+            ;;
+    esac
+
+    if [[ -z "$os_version" ]] || ! version_ge "$os_version" "$min_version"; then
+        echo -e "\033[31m当前系统版本过旧：$os_name。已拒绝安装 7.x 主线内核。\033[0m"
+        echo -e "\033[33m最低要求：${distro_name} ${min_version}+。请先升级系统，再重新运行安装脚本。\033[0m"
+        echo -e "\033[33m你仍可使用本脚本的状态检查、网络调优、清空优化或卸载功能。\033[0m"
+        return 1
+    fi
+}
+
 # 函数：清理 sysctl.d 中的旧配置
 clean_sysctl_conf() {
     sudo touch "$SYSCTL_CONF"
@@ -672,6 +722,8 @@ install_packages() {
 
 # 函数：检查并安装最新版本
 install_latest_version() {
+    assert_supported_kernel_install_system || return 1
+
     echo -e "\033[36m正在从 GitHub 获取最新版本信息...\033[0m"
     BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
     RELEASE_DATA=$(gh_api_get "$BASE_URL")
@@ -723,6 +775,8 @@ install_latest_version() {
 
 # 函数：安装指定版本
 install_specific_version() {
+    assert_supported_kernel_install_system || return 1
+
     BASE_URL="https://api.github.com/repos/byJoey/Actions-bbr-v3/releases"
     RELEASE_DATA=$(gh_api_get "$BASE_URL")
     if [[ -z "$RELEASE_DATA" ]]; then
