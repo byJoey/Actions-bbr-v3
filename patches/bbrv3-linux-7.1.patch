@@ -385,7 +385,7 @@ index aec7805b1..757fa5858 100644
 --- a/net/ipv4/tcp_bbr.c
 +++ b/net/ipv4/tcp_bbr.c
 @@ -1,19 +1,19 @@
--// SPDX-License-Identifier: GPL-2.0
+-// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
 -/* Bottleneck Bandwidth and RTT (BBR) congestion control
 +/* BBR (Bottleneck Bandwidth and RTT) congestion control
   *
