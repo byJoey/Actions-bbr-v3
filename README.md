@@ -397,10 +397,10 @@ sudo python3 cve_2026_31431_detector.py
 
 ## Star History
 
-<a href="https://star-history.com/#byJoey/Actions-bbr-v3&Timeline">
+<a href="https://star-history.dera.page/#byJoey/Actions-bbr-v3&Timeline">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=byJoey/Actions-bbr-v3&type=Timeline&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=byJoey/Actions-bbr-v3&type=Timeline" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=byJoey/Actions-bbr-v3&type=Timeline" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=byJoey/Actions-bbr-v3&type=Timeline&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=byJoey/Actions-bbr-v3&type=Timeline" />
+   <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=byJoey/Actions-bbr-v3&type=Timeline" />
  </picture>
 </a>
